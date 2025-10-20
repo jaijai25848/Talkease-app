@@ -161,17 +161,6 @@
     </ul>
 </div>
 
-
-                <!-- Practice: Quick access to last selected (or default) -->
-                <a href="{{ route('exercises.practice', [
-                        session('selected_exercise_level', 'easy'),
-                        session('selected_exercise_category', 'word')
-                    ]) }}"
-                   class="nav-link {{ Request::routeIs('exercises.practice') ? 'active' : '' }}">
-                    <i class="fa-solid fa-bolt me-2"></i>
-                    <span>Practice</span>
-                </a>
-
                 <!-- Coach Feedback -->
                 <a href="{{ route('student.dashboard') }}#coach-feedback"
                    class="nav-link {{ Request::is('student/feedback*') ? 'active' : '' }}">
@@ -205,11 +194,6 @@
                     }}" 
                     alt="Avatar" 
                     class="profile-pic me-3">
-                <!-- Notification bell (placeholder for future) -->
-                <button class="btn btn-light position-relative d-none d-md-inline-flex" style="margin-right: 8px;">
-                    <i class="fa-regular fa-bell"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size:.7em;">3</span>
-                </button>
                 <!-- Settings Dropdown -->
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light border-0" data-bs-toggle="dropdown" aria-expanded="false">
