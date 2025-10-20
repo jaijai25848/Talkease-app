@@ -1,6 +1,5 @@
 <?php
-use App\Http\Controllers\CoachDashboardController;
-use App\Http\Controllers\AdminDashboardController;
+
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Auth;
 
@@ -13,33 +12,31 @@ use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Auth\SocialController;
 
 use App\Http\Controllers\StudentDashboardController;
+use App\Http\Controllers\CoachDashboardController;
+use App\Http\Controllers\AdminDashboardController;
 
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\SystemLogsController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\SettingsController;
+
 use App\Http\Controllers\SpeechController;
 use App\Http\Controllers\ExerciseController;
-use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PracticeFeedbackController;
-
-// ✅ import for CSRF exemption
-use App\Http\Middleware\VerifyCsrfToken;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DatasetController;
 
 // ================= PUBLIC =================
 Route::get('/', fn () => view('welcome'))->name('welcome');
 
 // ================= GUEST AUTH =================
 Route::middleware('guest')->group(function () {
-    // Register
     Route::get('register', [RegisterController::class, 'showRegistrationForm'])->name('register');
     Route::post('register', [RegisterController::class, 'register']);
 
-    // Login
     Route::get('login', [LoginController::class, 'showLoginForm'])->name('login');
     Route::post('login', [LoginController::class, 'login']);
 
-    // Password reset
     Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request');
     Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
     Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset');
@@ -47,97 +44,102 @@ Route::middleware('guest')->group(function () {
 });
 
 // ================= EMAIL VERIFICATION =================
-Route::get('/email/verify', function () {
-    return view('auth.verify-email');
-})->middleware('auth')->name('verification.notice');
+Route::get('/email/verify', fn () => view('auth.verify-email'))
+    ->middleware('auth')->name('verification.notice');
 
 Route::get('/email/verify/{id}/{hash}', [VerificationController::class, 'verify'])
-    ->middleware(['auth', 'signed'])
-    ->name('verification.verify');
+    ->middleware(['auth', 'signed'])->name('verification.verify');
 
 Route::post('/email/verification-notification', [VerificationController::class, 'resend'])
-    ->middleware(['auth', 'throttle:6,1'])
-    ->name('verification.send');
+    ->middleware(['auth', 'throttle:6,1'])->name('verification.send');
 
 // ================= SOCIAL LOGIN =================
-// Explicit Google
-Route::get('/auth/google/redirect', [SocialController::class, 'redirect'])->name('google.redirect');
-Route::get('/auth/google/callback', [SocialController::class, 'callback'])->name('google.callback');
+Route::get('/auth/google/redirect',  [SocialController::class, 'redirect'])->name('google.redirect');
+Route::get('/auth/google/callback',  [SocialController::class, 'callback'])->name('google.callback');
 
-// Explicit Facebook
 Route::get('/auth/facebook/redirect', [SocialController::class, 'facebookRedirect'])->name('facebook.redirect');
 Route::get('/auth/facebook/callback', [SocialController::class, 'facebookCallback'])->name('facebook.callback');
 
-// Optional generic provider routes (only allow google|facebook)
 Route::get('auth/redirect/{provider}', [SocialController::class, 'providerRedirect'])
-    ->whereIn('provider', ['google', 'facebook'])
-    ->name('social.redirect');
-
+    ->whereIn('provider', ['google', 'facebook'])->name('social.redirect');
 Route::get('auth/callback/{provider}', [SocialController::class, 'providerCallback'])
-    ->whereIn('provider', ['google', 'facebook'])
-    ->name('social.callback');
+    ->whereIn('provider', ['google', 'facebook'])->name('social.callback');
 
 // ================= PROFILE & LOGOUT =================
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
-
-    // Logout must be POST for CSRF protection
-    Route::post('logout', [LoginController::class, 'logout'])->name('logout');
+    Route::post('logout', [LoginController::class, 'logout'])->name('logout'); // POST for CSRF
 });
 
-// ================= APP (AUTH + VERIFIED) =================
+// ================= APP (AUTH) =================
 Route::middleware(['auth'])->group(function () {
-    // Speech APIs
-    Route::post('/speech/recognize', [SpeechController::class, 'recognize'])->name('speech.recognize');
 
-    // ✅ CSRF-exempt Whisper endpoint (only this route)
+    // -------- Speech / STT --------
+    Route::post('/speech/recognize', [SpeechController::class, 'recognize'])->name('speech.recognize');
     Route::post('/stt/whisper', [SpeechController::class, 'whisper'])
         ->name('stt.whisper')
         ->withoutMiddleware(\App\Http\Middleware\VerifyCsrfToken::class);
-
-    // ✅ New Fast Whisper local server route
     Route::post('/stt/whisper-fast', [SpeechController::class, 'whisperFast'])->name('stt.whisper.fast');
 
-    // Exercises
-    Route::get('/exercises', [ExerciseController::class, 'index'])->name('exercises.index');
-    Route::get('/exercises/select', [ExerciseController::class, 'select'])->name('exercises.select');
-    Route::get('/exercises/level/{level}', [ExerciseController::class, 'byLevel'])->name('exercises.byLevel');
-    Route::get('/exercises/{exercise}', [ExerciseController::class, 'show'])->name('exercises.show');
-    Route::get('/exercises/practice/{level}/{category}', [ExerciseController::class, 'practice'])->name('exercises.practice');
+    // -------- Exercises flow --------
+    Route::prefix('exercises')->name('exercises.')->group(function () {
+        Route::get('/',            [ExerciseController::class, 'index'])->name('index');
+        Route::get('/select',      [ExerciseController::class, 'select'])->name('select');
 
-    // Practice examples for AI progression
+        // target for the Select page (GET) — validates & redirects to practice
+        Route::get('/start',       [ExerciseController::class, 'start'])->name('start');
+
+        Route::get('/practice/{level}/{category}', [ExerciseController::class, 'practice'])
+            ->whereIn('level', ['easy','medium','hard','insane'])
+            ->whereIn('category', ['word','sentence','phrase'])
+            ->name('practice');
+
+        Route::get('/show/{id}',   [ExerciseController::class, 'show'])->name('show');
+
+        Route::get('/example/{level}/{category}/{index?}', [ExerciseController::class, 'example'])
+            ->whereIn('level', ['easy','medium','hard','insane'])
+            ->whereIn('category', ['word','sentence','phrase'])
+            ->name('example');
+
+        Route::post('/submit',     [ExerciseController::class, 'submit'])->name('submit');
+    });
+
+    // Dashboard helper (optional)
     Route::get('/practice/example/{level}/{category}/{index}', [StudentDashboardController::class, 'getPracticeExample'])
+        ->whereIn('level', ['easy','medium','hard','insane'])
+        ->whereIn('category', ['word','sentence','phrase'])
         ->name('practice.example');
 
-    // Pronunciation Feedback demo page
+    // Demo page + scoring
     Route::get('/practice', fn () => view('practice'))->name('practice.view');
     Route::post('/practice/score', [PracticeFeedbackController::class, 'score'])->name('practice.score');
 
-    // Student dashboard (default after login)
+    // Dashboards
     Route::get('/student/dashboard', [StudentDashboardController::class, 'index'])->name('student.dashboard');
     Route::post('/student/practice-select', [StudentDashboardController::class, 'practiceSelect'])->name('student.practice.select');
 
-    // Coach area
-    Route::middleware('role:coach')->group(function () {
-    });
-
-    // Admin area
+    // Admin
     Route::middleware('role:admin')->prefix('admin')->as('admin.')->group(function () {
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard/stats', [AdminDashboardController::class, 'stats'])->name('dashboard.stats');
         Route::get('/users', [UserManagementController::class, 'index'])->name('users');
-        Route::get('/logs', [SystemLogsController::class, 'index'])->name('system-logs');
-        Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
-        Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
-
-        // User CRUD
         Route::get('/users/{user}/edit', [UserManagementController::class, 'edit'])->name('users.edit');
         Route::put('/users/{user}', [UserManagementController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
-
-        // AJAX dashboard stats
-        Route::get('/dashboard/stats', [AdminDashboardController::class, 'getStats'])->name('dashboard.stats');
+        Route::get('/system-logs', [SystemLogsController::class, 'index'])->name('system.logs');
+        Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+        Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     });
+
+    // Coach
+    Route::middleware('role:coach')->group(function () {
+        Route::get('/coach/dashboard', [CoachDashboardController::class, 'index'])->name('coach.dashboard');
+    });
+
+    // Datasets
+    Route::get('/datasets', [DatasetController::class, 'index'])->name('datasets.index');
+    Route::get('/datasets/{dataset:slug}/random', [DatasetController::class, 'random'])->name('datasets.random');
 });
 
 // ================= DASHBOARD REDIRECTOR =================
@@ -170,61 +172,12 @@ Route::get('/_diag/whisper', function () {
 
 // ================= LEGACY / FALLBACK =================
 Route::redirect('/home', '/student/dashboard', 301);
-
-Route::middleware(['auth','role:admin'])->group(function () {
-});
-
-Route::middleware(['auth','role:admin'])->group(function () {
-});
-
-
-Route::middleware(['auth','role:admin'])->group(function () {
-    Route::get('/admin/dashboard', [AdminDashboardController::class, 'index'])->name('admin.dashboard');
-    Route::get('/admin/dashboard/stats', [AdminDashboardController::class, 'stats'])->name('admin.dashboard.stats');
-});
-
-
-Route::middleware(['auth','role:coach'])->group(function () {
-    Route::get('/coach/dashboard', [CoachDashboardController::class, 'index'])->name('coach.dashboard');
-});
-
-// --- Admin: User management ---
-Route::middleware(['auth','role:admin'])->group(function () {
-    Route::get('/admin/users', [UserManagementController::class, 'index'])->name('admin.users');
-    Route::get('/admin/users/{id}/edit', [UserManagementController::class, 'edit'])->name('admin.users.edit');
-    Route::put('/admin/users/{id}', [UserManagementController::class, 'update'])->name('admin.users.update');
-    Route::delete('/admin/users/{id}', [UserManagementController::class, 'destroy'])->name('admin.users.destroy');
-});
-
-// --- Admin: System Logs ---
-Route::middleware(['auth','role:admin'])->group(function () {
-    Route::get('/admin/system-logs', [SystemLogsController::class, 'index'])->name('admin.system.logs');
-});
-
-/* ---------- Exercises / Practice ---------- */
-Route::get('/exercises/practice/{level}/{category}', [ExerciseController::class, 'practice'])
-    ->whereIn('level', ['easy','medium','hard'])
-    ->whereIn('category', ['word','sentence'])
-    ->name('exercises.practice');
-
-Route::get('/exercises/example/{level}/{category}/{index?}', [ExerciseController::class, 'example'])
-    ->name('exercises.example');
-
-Route::post('/exercises/submit', [ExerciseController::class, 'submit'])
-    ->name('exercises.submit');
-
 Route::fallback(fn () => redirect()->route('welcome'));
 
-
-
-Route::prefix('exercises')->name('exercises.')->group(function () {
-    Route::get('/', [\App\Http\Controllers\ExerciseController::class, 'index'])->name('index');
-    Route::get('/select', [\App\Http\Controllers\ExerciseController::class, 'select'])->name('select');
-    Route::get('/show/{id}', [\App\Http\Controllers\ExerciseController::class, 'show'])->name('show');
-    Route::get('/practice/{level}/{category}', [\App\Http\Controllers\ExerciseController::class, 'practice'])->name('practice');
+// === BEGIN: practice block (auto) ===
+\Illuminate\Support\Facades\Route::prefix('exercises/practice')->group(function () {
+    \Illuminate\Support\Facades\Route::any('/{any?}', function () {
+        abort(404);
+    })->where('any', '.*');
 });
-
-Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group(function () {
-    // Controller returns the PARTIAL. If you prefer full page, change view in controller to 'admin.analytics'
-    Route::get('/analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('analytics');
-});
+// === END: practice block (auto) ===
