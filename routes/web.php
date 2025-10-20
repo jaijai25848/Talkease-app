@@ -1,3 +1,4 @@
+use AppHttpControllersDatasetController;
 <?php
 use App\Http\Controllers\CoachDashboardController;
 use App\Http\Controllers\AdminDashboardController;
@@ -227,4 +228,9 @@ Route::prefix('exercises')->name('exercises.')->group(function () {
 Route::middleware(['auth','role:admin'])->prefix('admin')->name('admin.')->group(function () {
     // Controller returns the PARTIAL. If you prefer full page, change view in controller to 'admin.analytics'
     Route::get('/analytics', [\App\Http\Controllers\AnalyticsController::class, 'index'])->name('analytics');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::get('/datasets', [DatasetController::class, 'index'])->name('datasets.index');
+    Route::get('/datasets/{dataset:slug}/random', [DatasetController::class, 'random'])->name('datasets.random');
 });
