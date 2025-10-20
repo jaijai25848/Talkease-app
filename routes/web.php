@@ -1,6 +1,5 @@
 <?php
 use App\Http\Controllers\DatasetController;
-<?php
 use App\Http\Controllers\CoachDashboardController;
 use App\Http\Controllers\AdminDashboardController;
 use Illuminate\Support\Facades\Route;
