@@ -1,4 +1,4 @@
-use AppHttpControllersDatasetController;
+use App\Http\Controllers\DatasetController;
 <?php
 use App\Http\Controllers\CoachDashboardController;
 use App\Http\Controllers\AdminDashboardController;
